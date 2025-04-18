@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Label Image Classification</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .container {
+            margin-top: 20px;
+        }
+        .upload-container {
+            border: 2px dashed #ccc;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        #upload-btn {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        #upload-btn:hover {
+            background-color: #45a049;
+        }
+        #file-input {
+            display: none;
+        }
+        #preview-container {
+            max-width: 300px;
+            margin: 20px auto;
+            display: none;
+        }
+        #preview-image {
+            max-width: 100%;
+            display: block;
+            margin: 0 auto;
+        }
+        #results-container {
+            margin-top: 20px;
+            display: none;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .binary-result {
+            font-family: monospace;
+            font-size: 24px;
+            text-align: center;
+            margin-bottom: 15px;
+            letter-spacing: 5px;
+        }
+        .result-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .progress-container {
+            flex-grow: 1;
+            margin: 0 20px;
+            height: 20px;
+            background-color: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            background-color: #4CAF50;
+        }
+        .loader {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #4CAF50;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+            display: none;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <h1>Multi-Label Image Classification</h1>
+    <div class="container">
+        <div class="upload-container">
+            <p>Upload an image for classification</p>
+            <button id="upload-btn">Choose Image</button>
+            <input type="file" id="file-input" accept="image/*">
+        </div>
+        
+        <div id="preview-container">
+            <h3>Image Preview:</h3>
+            <img id="preview-image" src="#" alt="Preview">
+            <button id="submit-btn" style="margin-top: 10px; padding: 8px 16px;">Submit for Classification</button>
+        </div>
+        
+        <div class="loader" id="loader"></div>
+        
+        <div id="results-container">
+            <h3>Classification Results:</h3>
+            <div class="binary-result" id="binary-result"></div>
+            <h4>Detailed Class Probabilities:</h4>
+            <div id="detailed-results"></div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('upload-btn').addEventListener('click', function() {
+            document.getElementById('file-input').click();
+        });
+
+        document.getElementById('file-input').addEventListener('change', function(e) {
+            if (e.target.files && e.target.files[0]) {
+                const file = e.target.files[0];
+                const previewImage = document.getElementById('preview-image');
+                const previewContainer = document.getElementById('preview-container');
+                
+                // Show preview
+                previewImage.src = URL.createObjectURL(file);
+                previewContainer.style.display = 'block';
+                
+                // Reset results
+                document.getElementById('results-container').style.display = 'none';
+                document.getElementById('binary-result').textContent = '';
+                document.getElementById('detailed-results').innerHTML = '';
+            }
+        });
+
+        document.getElementById('submit-btn').addEventListener('click', function() {
+            const fileInput = document.getElementById('file-input');
+            if (fileInput.files && fileInput.files[0]) {
+                const file = fileInput.files[0];
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                // Show loader
+                document.getElementById('loader').style.display = 'block';
+                document.getElementById('results-container').style.display = 'none';
+                
+                // Send request to server
+                fetch('/predict', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    // Hide loader
+                    document.getElementById('loader').style.display = 'none';
+                    
+                    if (data.error) {
+                        alert('Error: ' + data.error);
+                        return;
+                    }
+                    
+                    // Display results
+                    document.getElementById('binary-result').textContent = data.binary_result;
+                    
+                    const resultsContainer = document.getElementById('detailed-results');
+                    resultsContainer.innerHTML = '';
+                    
+                    // Display results in original class order (not sorted by probability)
+                    data.detailed_results.forEach(result => {
+                        const resultItem = document.createElement('div');
+                        resultItem.className = 'result-item';
+                        
+                        const label = document.createElement('div');
+                        label.textContent = `${result.label}: `;
+                        label.style.minWidth = '150px';
+                        
+                        const status = document.createElement('div');
+                        status.textContent = result.status;
+                        status.style.fontWeight = 'bold';
+                        status.style.marginLeft = '10px';
+                        status.style.marginRight = '10px';
+                        status.style.color = result.status === 'Open' ? '#4CAF50' : '#F44336';
+                        
+                        const probability = document.createElement('div');
+                        probability.textContent = `${(result.probability * 100).toFixed(2)}%`;
+                        probability.style.minWidth = '70px';
+                        probability.style.textAlign = 'right';
+                        
+                        const progressContainer = document.createElement('div');
+                        progressContainer.className = 'progress-container';
+                        
+                        const progressBar = document.createElement('div');
+                        progressBar.className = 'progress-bar';
+                        progressBar.style.width = `${result.probability * 100}%`;
+                        // Use green for open (>0.5), red for closed
+                        progressBar.style.backgroundColor = result.prediction === 1 ? '#4CAF50' : '#F44336';
+                        
+                        progressContainer.appendChild(progressBar);
+                        
+                        resultItem.appendChild(label);
+                        resultItem.appendChild(status);
+                        resultItem.appendChild(progressContainer);
+                        resultItem.appendChild(probability);
+                        
+                        resultsContainer.appendChild(resultItem);
+                    });
+                    
+                    document.getElementById('results-container').style.display = 'block';
+                })
+                .catch(error => {
+                    document.getElementById('loader').style.display = 'none';
+                    alert('Error: ' + error);
+                });
+            }
+        });
+    </script>
+</body>
+</html>
